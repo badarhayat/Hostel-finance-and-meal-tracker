@@ -14,10 +14,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # Step 2: Debug - List all files
+      # Step 2: Debug - List all files to check paths
       - name: List all files for debugging
         run: ls -R
 
-      # Step 3: Deploy to Firebase Hosting
-      - name: Deploy to Firebase
-        run: npx firebase deploy --only hosting --token "$FIREBASE_TOKEN"
+      # Step 3: Deploy to Firebase Hosting using official GitHub Action
+      - name: Deploy to Firebase Hosting
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: "${{ secrets.GITHUB_TOKEN }}"
+          firebaseServiceAccount: "${{ secrets.FIREBASE_SERVICE_ACCOUNT }}"
+          channelId: live
