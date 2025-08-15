@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Hostel Finance & Meals — Single Page App</title>
+<style>
+  :root { --bd:#e5e7eb; --muted:#6b7280; --pill:#eef2ff; }
+  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; background:#f8fafc; color:#111827; }
+  header { background:#fff; border-bottom:1px solid var(--bd); position:sticky; top:0; z-index:10; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 14px 16px; }
+  .row { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  .spacer { flex:1; }
+  .btn { border:1px solid var(--bd); background:#fff; border-radius:8px; padding:8px 12px; cursor:pointer; }
+  .btn.primary { background:#2563eb; color:#fff; border-color:#2563eb; }
+  .btn.danger { background:#dc2626; color:#fff; border-color:#dc2626; }
+  .pill { background:var(--pill); border-radius:999px; padding:2px 10px; font-size:12px; }
+  main { padding: 16px; }
+  section { background:#fff; border:1px solid var(--bd); border-radius:12px; padding:16px; margin-bottom:14px; }
+  h2 { margin: 0 0 8px; font-size:18px; }
+  h3 { margin: 16px 0 8px; font-size:16px; }
+  label { display:inline-flex; flex-direction:column; gap:6px; margin-right:12px; font-size:14px; }
+  input, select { border:1px solid var(--bd); border-radius:8px; padding:8px; min-width:180px; }
+  input[type="number"] { width:120px; }
+  table { border-collapse: collapse; width:100%; }
+  th,td { border:1px solid var(--bd); padding:8px; text-align:left; }
+  th { background:#f3f4f6; }
+  .grid { display:grid; grid-template-columns: repeat(7, 1fr); gap:6px; }
+  .cell { border:1px solid var(--bd); border-radius:10px; min-height:92px; padding:6px; background:#fff; }
+  .muted { color:var(--muted); }
+  .rate { font-size:12px; margin-top:4px; }
+  .hidden { display:none !important; }
+  .right { text-align:right; }
+  .totals { display:flex; gap:18px; flex-wrap:wrap; }
+  .notice { color:#ea580c; font-size:13px; }
+  .ok { color:#16a34a; }
+  .err { color:#dc2626; }
+  .scroll { overflow:auto; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap row">
+    <strong>🏠 Hostel Finance & Meal Tracker</strong>
+    <button class="btn" data-nav="public">Public Calendar</button>
+    <button class="btn" data-nav="manager">Manager</button>
+    <button class="btn" data-nav="admin">Admin</button>
+    <div class="spacer"></div>
+    <span id="who" class="pill hidden"></span>
+    <span id="roleBadge" class="pill hidden"></span>
+    <button id="loginOpen" class="btn">Log in</button>
+    <button id="logoutBtn" class="btn danger hidden">Log out</button>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- PUBLIC CALENDAR -->
+  <section id="publicSection">
+    <h2>Public — Meal Rates & Items</h2>
+    <div class="row">
+      <div class="row">
+        <button class="btn" id="prevMonth">◀</button>
+        <span id="calTitle" class="pill"></span>
+        <button class="btn" id="nextMonth">▶</button>
+      </div>
+      <label>Jump to month
+        <input id="jumpMonth" type="month" />
+      </label>
+    </div>
+    <div class="grid" id="calendarGrid"></div>
+    <h3 id="detailTitle" class="hidden">Details</h3>
+    <div id="dayDetails"></div>
+  </section>
+
+  <!-- AUTH SECTION (modal-like) -->
+  <section id="authSection" class="hidden">
+    <h2>Log in (Managers/Admins)</h2>
+    <div class="row">
+      <label>Email <input id="email" type="email" placeholder="you@example.com" /></label>
+      <label>Password <input id="password" type="password" placeholder="••••••••" /></label>
+    </div>
+    <div class="row">
+      <button id="loginBtn" class="btn primary">Log in</button>
+      <span id="authMsg" class="err"></span>
+    </div>
+    <p class="notice">Accounts are created manually in Firebase Console. Ask admin to set your role to <b>manager</b> or <b>admin</b> in <code>users/{uid}</code>.</p>
+  </section>
+
+  <!-- MANAGER -->
+  <section id="managerSection" class="hidden">
+    <h2>Manager — Add Income & Expenses</h2>
+
+    <div class="totals">
+      <div>💰 Total Incoming: <b id="sumIn">0</b></div>
+      <div>💸 Total Outgoing: <b id="sumOut">0</b></div>
+      <div>🏦 Balance: <b id="sumBal">0</b></div>
+    </div>
+
+    <h3>1) Add Incoming</h3>
+    <div class="row">
+      <label>Type
+        <select id="incomeType">
+          <option value="bill">Student Bill</option>
+          <option value="security">Security Deposit</option>
+          <option value="other">Other Income</option>
+        </select>
+      </label>
+      <label>Description
+        <input id="incomeDesc" placeholder="e.g., Mess fee (Aug)" />
+      </label>
+      <label>Amount
+        <input id="incomeAmt" type="number" min="0" step="0.01" />
+      </label>
+      <label>Date
+        <input id="incomeDate" type="date" />
+      </label>
+      <button class="btn primary" id="addIncomeBtn">Add Income</button>
+      <span id="incomeMsg"></span>
+    </div>
+
+    <h3>2) Add Meal (Lunch/Dinner)</h3>
+    <p class="muted">Use the fixed list below. Enter quantity & unit price for the day. Add misc items if needed. Totals are automatic.</p>
+    <div class="row">
+      <label>Date <input id="mealDate" type="date" /></label>
+      <label>Meal
+        <select id="mealType">
+          <option value="lunch">Lunch</option>
+          <option value="dinner">Dinner</option>
+        </select>
+      </label>
+      <label>Students Present
+        <input id="students" type="number" min="0" />
+      </label>
+    </div>
+
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Item</th><th>Qty</th><th>Unit Price</th><th class="right">Total</th></tr></thead>
+        <tbody id="itemsBody"></tbody>
+        <tfoot>
+          <tr><th colspan="3" class="right">Items Subtotal</th><th class="right" id="itemsSubtotal">0</th></tr>
+        </tfoot>
+      </table>
+    </div>
+
+    <h4>Misc Items</h4>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Name</th><th>Qty</th><th>Unit Price</th><th class="right">Total</th><th></th></tr></thead>
+        <tbody id="miscBody"></tbody>
+        <tfoot>
+          <tr>
+            <td><input id="miscName" placeholder="e.g., Gas refill" /></td>
+            <td><input id="miscQty" type="number" step="0.01" value="1" /></td>
+            <td><input id="miscPrice" type="number" step="0.01" value="0" /></td>
+            <td class="right" id="miscPrev">0</td>
+            <td><button class="btn" id="addMiscBtn">Add</button></td>
+          </tr>
+          <tr><th colspan="3" class="right">Misc Subtotal</th><th class="right" id="miscSubtotal">0</th><th></th></tr>
+        </tfoot>
+      </table>
+    </div>
+
+    <div class="totals" style="margin-top:8px;">
+      <div>Grand Total: <b id="grandTotal">0</b></div>
+      <div>Per Student: <b id="perHead">0</b></div>
+      <button class="btn primary" id="saveMealBtn">Save Meal & Publish</button>
+      <span id="mealMsg"></span>
+    </div>
+
+    <h3>3) Add Other Outgoing (Maintenance etc.)</h3>
+    <div class="row">
+      <label>Description <input id="outDesc" placeholder="e.g., Plumbing repair" /></label>
+      <label>Amount <input id="outAmt" type="number" min="0" step="0.01" /></label>
+      <label>Date <input id="outDate" type="date" /></label>
+      <button class="btn" id="addOutgoingBtn">Add Outgoing</button>
+      <span id="outMsg"></span>
+    </div>
+
+    <h3>Recent Activity</h3>
+    <div id="recentActivity" class="muted">Loading…</div>
+  </section>
+
+  <!-- ADMIN (lightweight): shows recent and export -->
+  <section id="adminSection" class="hidden">
+    <h2>Admin — Overview & Export</h2>
+    <div class="totals">
+      <div>💰 Total Incoming: <b id="a_sumIn">0</b></div>
+      <div>💸 Total Outgoing: <b id="a_sumOut">0</b></div>
+      <div>🏦 Balance: <b id="a_sumBal">0</b></div>
+    </div>
+    <div class="row">
+      <button class="btn" id="exportCSV">Export last 60 days (CSV)</button>
+      <span id="exportMsg" class="muted"></span>
+    </div>
+    <h3>Latest 20 Incomes</h3>
+    <div id="adminIncomes"></div>
+    <h3>Latest 20 Expenses</h3>
+    <div id="adminExpenses"></div>
+  </section>
+
+</main>
+
+<!-- Firebase SDKs (compat builds) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<script>
+/* ---------- 0) CONFIGURE FIREBASE (replace this block!) ---------- */
+const firebaseConfig = {
+  apiKey: "AIzaSyCPh2ek3Pw3MtS1tn7eqDPsb8tpskx94MU",
+  authDomain: "hostel-meal-tracker-mumtaz.firebaseapp.com",
+  projectId: "hostel-meal-tracker-mumtaz",
+  storageBucket: "hostel-meal-tracker-mumtaz.firebasestorage.app",
+  messagingSenderId: "90929716152",
+  appId: "1:90929716152:web:688ad3ff122b0979990d4d"
+};firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db   = firebase.firestore();
+
+/* ---------- helpers ---------- */
+const $ = id => document.getElementById(id);
+const fmt = n => Number(n||0).toLocaleString(undefined,{maximumFractionDigits:2});
+const todayStr = () => new Date().toISOString().slice(0,10);
+function show(id) {
+  // public is always visible; others toggled
+  $("publicSection").classList.add("hidden");
+  $("authSection").classList.add("hidden");
+  $("managerSection").classList.add("hidden");
+  $("adminSection").classList.add("hidden");
+  if (id) $(id).classList.remove("hidden");
+}
+
+/* ---------- NAV ---------- */
+document.querySelectorAll("[data-nav]").forEach(b=>{
+  b.onclick = () => {
+    const to = b.dataset.nav;
+    if (to === "public") show("publicSection");
+    if (to === "manager") show("managerSection");
+    if (to === "admin") show("adminSection");
+  };
+});
+$("loginOpen").onclick = ()=> show("authSection");
+$("logoutBtn").onclick = ()=> auth.signOut();
+
+/* ---------- AUTH ---------- */
+$("loginBtn").onclick = async () => {
+  $("authMsg").textContent = "";
+  try{
+    await auth.signInWithEmailAndPassword($("email").value.trim(), $("password").value);
+  }catch(e){ $("authMsg").textContent = e.message; }
+};
+
+let userRole = null;
+auth.onAuthStateChanged(async (u)=>{
+  if (!u) {
+    $("who").classList.add("hidden");
+    $("roleBadge").classList.add("hidden");
+    $("logoutBtn").classList.add("hidden");
+    $("loginOpen").classList.remove("hidden");
+    // show public by default
+    show("publicSection");
+    return;
+  }
+  $("who").textContent = u.email || "";
+  $("who").classList.remove("hidden");
+  $("logoutBtn").classList.remove("hidden");
+  $("loginOpen").classList.add("hidden");
+
+  const prof = await db.collection("users").doc(u.uid).get();
+  userRole = (prof.exists && prof.data().role) || "public";
+  $("roleBadge").textContent = userRole.toUpperCase();
+  $("roleBadge").classList.remove("hidden");
+
+  // default landing for roles
+  if (userRole === "admin") show("adminSection");
+  else if (userRole === "manager") show("managerSection");
+  else show("publicSection");
+
+  // load role dashboards
+  if (["manager","admin"].includes(userRole)) {
+    initSummaryWidgets(); // both use this
+    loadRecentActivity();
+  }
+  if (userRole === "admin") initAdminLists();
+});
+
+/* ---------- HARD-CODED DAILY ITEMS (from your list) ---------- */
+const FIXED_ITEMS = [
+  "Aaloo","Atta","karahi masala","Channay","chicken","chowaray","knor","custard","Daal","Dahi","Garm masala",
+  "gas cylinder","girri sogi,illaichi","Haleem Masala","Imli","kali mirch","Lemon","Kheeray","milk","Oil",
+  "Pakorian","pissa dhania","Piyaaz","Podina","red chilli","rent","rice","saban bartan","Saban hand","sabat dhania",
+  "Sabz Dhania","sabz mirch","Saraf bunas","salt","semian","Sirka","Tea","sugar","Tamatar","Thoom Adrak",
+  "Tissue","bulab mess","wood","zarda rang","Zeera","store","egg","mandi"
+].map(n => ({ name:n, qty:0, price:0, total:0 }));
+
+/* ---------- MANAGER: MEAL ENTRY UI ---------- */
+let rows = [];         // clones FIXED_ITEMS per meal entry
+let miscRows = [];
+function resetMealForm() {
+  rows = FIXED_ITEMS.map(x=>({ ...x })); // fresh copy
+  miscRows = [];
+  $("itemsBody").innerHTML = rows.map((r,i)=>`
+    <tr>
+      <td>${r.name}</td>
+      <td><input data-i="${i}" data-f="qty" type="number" step="0.01" value="0"></td>
+      <td><input data-i="${i}" data-f="price" type="number" step="0.01" value="0"></td>
+      <td class="right" id="rt-${i}">0</td>
+    </tr>
+  `).join("");
+  $("miscBody").innerHTML = "";
+  $("itemsSubtotal").textContent = "0";
+  $("miscSubtotal").textContent = "0";
+  $("grandTotal").textContent = "0";
+  $("perHead").textContent = "0";
+  $("mealMsg").textContent = "";
+  $("students").value = "";
+  $("mealDate").value = todayStr();
+  $("mealType").value = "lunch";
+  $("miscName").value = ""; $("miscQty").value = 1; $("miscPrice").value = 0; $("miscPrev").textContent = "0";
+}
+function recomputeTotals() {
+  let itemsSub = 0, miscSub = 0;
+  rows.forEach((r,i)=>{
+    r.total = (+r.qty||0) * (+r.price||0);
+    itemsSub += r.total;
+    const cell = document.getElementById("rt-"+i);
+    if (cell) cell.textContent = fmt(r.total);
+  });
+  miscSub = miscRows.reduce((a,x)=>a+(+x.total||0),0);
+  $("itemsSubtotal").textContent = fmt(itemsSub);
+  $("miscSubtotal").textContent = fmt(miscSub);
+  const grand = itemsSub + miscSub;
+  $("grandTotal").textContent = fmt(grand);
+  const sc = +$("students").value || 0;
+  $("perHead").textContent = sc>0 ? fmt(grand/sc) : "0";
+}
+document.addEventListener("input", (e)=>{
+  const t = e.target;
+  if (t && t.dataset && t.dataset.i != null) {
+    const idx = +t.dataset.i;
+    const field = t.dataset.f;
+    rows[idx][field] = +t.value;
+    recomputeTotals();
+  }
+  if (t && (t.id==="students" || t.id==="miscQty" || t.id==="miscPrice")) {
+    const q = +$("miscQty").value || 0;
+    const p = +$("miscPrice").value || 0;
+    $("miscPrev").textContent = fmt(q*p);
+    recomputeTotals();
+  }
+});
+$("addMiscBtn").onclick = ()=>{
+  const name = $("miscName").value.trim(); if (!name) return;
+  const q = +$("miscQty").value || 0;
+  const p = +$("miscPrice").value || 0;
+  const tot = q*p;
+  miscRows.push({ name, quantity:q, price:p, total:tot });
+  const idx = miscRows.length-1;
+  const tr = document.createElement("tr");
+  tr.innerHTML = `<td>${name}</td><td>${q}</td><td>${p}</td><td class="right">${fmt(tot)}</td>
+                  <td><button class="btn" data-del="${idx}">Delete</button></td>`;
+  $("miscBody").appendChild(tr);
+  $("miscName").value=""; $("miscQty").value=1; $("miscPrice").value=0; $("miscPrev").textContent="0";
+  recomputeTotals();
+};
+document.addEventListener("click", (e)=>{
+  if (e.target && e.target.dataset && e.target.dataset.del != null) {
+    const i = +e.target.dataset.del;
+    miscRows.splice(i,1);
+    $("miscBody").innerHTML="";
+    miscRows.forEach((x,idx)=>{
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${x.name}</td><td>${x.quantity}</td><td>${x.price}</td><td class="right">${fmt(x.total)}</td>
+                      <td><button class="btn" data-del="${idx}">Delete</button></td>`;
+      $("miscBody").appendChild(tr);
+    });
+    recomputeTotals();
+  }
+});
+$("mealDate").value = todayStr();
+
+/* ---------- MANAGER: SAVE MEAL ---------- */
+$("saveMealBtn").onclick = async ()=>{
+  try {
+    $("mealMsg").textContent = "";
+    const date = $("mealDate").value || todayStr();
+    const mealType = $("mealType").value;
+    const students = +$("students").value || 0;
+
+    const used = rows.filter(r => (+r.qty)>0).map(r=>({
+      name:r.name, quantity:+r.qty, unitPrice:+r.price, total:+r.total
+    }));
+    const misc = miscRows.map(m=>({
+      name:m.name, quantity:+m.quantity, unitPrice:+m.price, total:+m.total
+    }));
+    const items = [...used, ...misc];
+    const totalCost = items.reduce((a,x)=>a+(+x.total||0),0);
+    const perHead   = students>0 ? (totalCost / students) : 0;
+
+    // Internal: meals/{date}-{mealType}
+    const mealId = `${date}-${mealType}`;
+    await db.collection("meals").doc(mealId).set({
+      date, mealType, studentCount: students,
+      items, totalCost, ratePerStudent: perHead,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    // Public copy
+    await db.collection("publicMeals").doc(mealId).set({
+      date, mealType, studentCount: students,
+      items, totalCost, ratePerStudent: perHead,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    // Accounting: add aggregate expense entry
+    await db.collection("expenses").add({
+      date, type: mealType, description: `${mealType} meal`, amount: totalCost,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    $("mealMsg").innerHTML = `<span class="ok">Saved ${mealId} ✔</span>`;
+    resetMealForm();
+    initSummaryWidgets();
+    loadRecentActivity();
+  } catch (e) {
+    $("mealMsg").innerHTML = `<span class="err">${e.message}</span>`;
+  }
+};
+
+/* ---------- MANAGER: INCOMING / OTHER OUTGOING ---------- */
+$("incomeDate").value = todayStr();
+$("outDate").value = todayStr();
+
+$("addIncomeBtn").onclick = async ()=>{
+  try{
+    $("incomeMsg").textContent = "";
+    const obj = {
+      date: $("incomeDate").value || todayStr(),
+      type: $("incomeType").value,
+      description: $("incomeDesc").value.trim() || "(no desc)",
+      amount: +$("incomeAmt").value || 0,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    if (!obj.amount || obj.amount<=0) throw new Error("Enter a valid income amount");
+    await db.collection("incomes").add(obj);
+    $("incomeMsg").innerHTML = `<span class="ok">Income added ✔</span>`;
+    $("incomeDesc").value=""; $("incomeAmt").value="";
+    initSummaryWidgets(); loadRecentActivity();
+  }catch(e){ $("incomeMsg").innerHTML = `<span class="err">${e.message}</span>`; }
+};
+
+$("addOutgoingBtn").onclick = async ()=>{
+  try{
+    $("outMsg").textContent = "";
+    const obj = {
+      date: $("outDate").value || todayStr(),
+      type: "other",
+      description: $("outDesc").value.trim() || "(maintenance/other)",
+      amount: +$("outAmt").value || 0,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    if (!obj.amount || obj.amount<=0) throw new Error("Enter a valid expense amount");
+    await db.collection("expenses").add(obj);
+    $("outMsg").innerHTML = `<span class="ok">Outgoing added ✔</span>`;
+    $("outDesc").value=""; $("outAmt").value="";
+    initSummaryWidgets(); loadRecentActivity();
+  }catch(e){ $("outMsg").innerHTML = `<span class="err">${e.message}</span>`; }
+};
+
+/* ---------- SUMMARY WIDGETS (used in Manager/Admin) ---------- */
+async function computeSums(days=60) {
+  // simple last-N-days sums (you can widen if needed)
+  const since = new Date(); since.setDate(since.getDate()-days);
+  const sinceStr = since.toISOString().slice(0,10);
+
+  const [ins, outs] = await Promise.all([
+    db.collection("incomes").where("date",">=", sinceStr).get(),
+    db.collection("expenses").where("date",">=", sinceStr).get()
+  ]);
+  const sumIn  = ins.docs.reduce((a,d)=>a+(+d.data().amount||0),0);
+  const sumOut = outs.docs.reduce((a,d)=>a+(+d.data().amount||0),0);
+  return { sumIn, sumOut, bal: sumIn - sumOut };
+}
+
+async function initSummaryWidgets() {
+  const {sumIn, sumOut, bal} = await computeSums(365); // 1-year window
+  $("sumIn").textContent  = fmt(sumIn);
+  $("sumOut").textContent = fmt(sumOut);
+  $("sumBal").textContent = fmt(bal);
+  $("a_sumIn").textContent  = fmt(sumIn);
+  $("a_sumOut").textContent = fmt(sumOut);
+  $("a_sumBal").textContent = fmt(bal);
+}
+
+/* ---------- RECENT ACTIVITY (Manager) ---------- */
+async function loadRecentActivity() {
+  const [ins, outs, meals] = await Promise.all([
+    db.collection("incomes").orderBy("createdAt","desc").limit(5).get(),
+    db.collection("expenses").orderBy("createdAt","desc").limit(5).get(),
+    db.collection("publicMeals").orderBy("date","desc").limit(6).get()
+  ]);
+  const asLine = (d)=> {
+    const x = d.data();
+    const when = (x.date || "").toString();
+    return `${when} — ${x.type||x.mealType}: ${x.description||""} — ${fmt(x.amount||x.totalCost||0)}`;
+  }
+  let html = "";
+  html += "<b>Incomes</b><br>"+ ins.docs.map(asLine).join("<br>");
+  html += "<br><br><b>Expenses</b><br>"+ outs.docs.map(asLine).join("<br>");
+  html += "<br><br><b>Meals</b><br>"+ meals.docs.map(d=>{
+    const v=d.data(); return `${v.date} — ${v.mealType} — Total ${fmt(v.totalCost)} — Per head ${fmt(v.ratePerStudent)} (Students ${v.studentCount})`;
+  }).join("<br>");
+  $("recentActivity").innerHTML = html || "<span class='muted'>No recent entries</span>";
+}
+
+/* ---------- ADMIN LISTS + CSV ---------- */
+async function initAdminLists() {
+  const [ins, outs] = await Promise.all([
+    db.collection("incomes").orderBy("createdAt","desc").limit(20).get(),
+    db.collection("expenses").orderBy("createdAt","desc").limit(20).get(),
+  ]);
+  $("adminIncomes").innerHTML = listTable(ins.docs, ["date","type","description","amount"]);
+  $("adminExpenses").innerHTML = listTable(outs.docs, ["date","type","description","amount"]);
+}
+function listTable(docs, cols) {
+  if (!docs.length) return `<div class="muted">No data</div>`;
+  const rows = docs.map(d=>{
+    const x=d.data();
+    return `<tr>${cols.map(c=>`<td>${(c==="amount")?fmt(x[c]):(x[c]??"")}</td>`).join("")}</tr>`;
+  }).join("");
+  return `<div class="scroll"><table><thead><tr>${cols.map(c=>`<th>${c}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+$("exportCSV").onclick = async ()=>{
+  try{
+    $("exportMsg").textContent = "Preparing…";
+    const since = new Date(); since.setDate(since.getDate()-60);
+    const sinceStr = since.toISOString().slice(0,10);
+    const [ins, outs] = await Promise.all([
+      db.collection("incomes").where("date",">=", sinceStr).get(),
+      db.collection("expenses").where("date",">=", sinceStr).get()
+    ]);
+    const toCSV = (docs, kind)=> docs.docs.map(d=>{
+      const x=d.data();
+      return `${kind},${x.date},${(x.type||"")},${(x.description||"")},${x.amount||0}`;
+    });
+    const csv = ["kind,date,type,description,amount"]
+      .concat(toCSV(ins,"income"))
+      .concat(toCSV(outs,"expense"))
+      .join("\n");
+    const blob = new Blob([csv], {type:"text/csv"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = "hostel-last-60-days.csv"; a.click();
+    URL.revokeObjectURL(url);
+    $("exportMsg").textContent = "Downloaded CSV.";
+  }catch(e){ $("exportMsg").textContent = e.message; }
+};
+
+/* ---------- PUBLIC CALENDAR ---------- */
+let calYear, calMonth; // JS month index 0..11
+function setYM(d=new Date()){
+  calYear = d.getFullYear(); calMonth = d.getMonth();
+  renderCalendar();
+}
+$("prevMonth").onclick = ()=> setYM(new Date(calYear,calMonth-1,1));
+$("nextMonth").onclick = ()=> setYM(new Date(calYear,calMonth+1,1));
+$("jumpMonth").onchange = ()=> {
+  const v = $("jumpMonth").value; if (!v) return;
+  const [yy,mm] = v.split("-").map(Number);
+  setYM(new Date(yy, mm-1, 1));
+};
+
+async function renderCalendar(){
+  const title = new Date(calYear, calMonth, 1).toLocaleString(undefined,{month:"long",year:"numeric"});
+  $("calTitle").textContent = title;
+  $("calendarGrid").innerHTML = "";
+
+  // Week headers
+  ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].forEach(d=>{
+    const h = document.createElement("div"); h.className="cell"; h.innerHTML = `<b>${d}</b>`;
+    $("calendarGrid").appendChild(h);
+  });
+
+  // Month range
+  const first = new Date(calYear,calMonth,1);
+  const pad = first.getDay();
+  const daysInMonth = new Date(calYear,calMonth+1,0).getDate();
+  const start = `${calYear}-${String(calMonth+1).padStart(2,"0")}-01`;
+  const end   = `${calYear}-${String(calMonth+1).padStart(2,"0")}-${String(daysInMonth).padStart(2,"0")}`;
+
+  // Fetch meals for month
+  const snap = await db.collection("publicMeals")
+    .where("date",">=", start).where("date","<=", end).orderBy("date","asc").get();
+  const byDate = {};
+  snap.docs.forEach(d=>{
+    const x=d.data();
+    if (!byDate[x.date]) byDate[x.date]={};
+    byDate[x.date][x.mealType] = x;
+  });
+
+  // padding cells
+  for (let i=0;i<pad;i++){ const c = document.createElement("div"); c.className="cell muted"; $("calendarGrid").appendChild(c); }
+
+  // day cells
+  for (let day=1; day<=daysInMonth; day++){
+    const dateStr = `${calYear}-${String(calMonth+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+    const cell = document.createElement("div"); cell.className="cell";
+    cell.innerHTML = `<div><b>${day}</b></div>`;
+    const data = byDate[dateStr];
+    if (data) {
+      if (data.lunch) {
+        const r = document.createElement("div"); r.className="rate";
+        r.innerHTML = `🍱 Lunch: <b>${fmt(data.lunch.ratePerStudent)}</b> (Total ${fmt(data.lunch.totalCost)})`;
+        cell.appendChild(r);
+      }
+      if (data.dinner) {
+        const r = document.createElement("div"); r.className="rate";
+        r.innerHTML = `🍽️ Dinner: <b>${fmt(data.dinner.ratePerStudent)}</b> (Total ${fmt(data.dinner.totalCost)})`;
+        cell.appendChild(r);
+      }
+      cell.style.cursor="pointer";
+      cell.onclick = ()=> showDetails(dateStr, data);
+    } else {
+      const r = document.createElement("div"); r.className="rate muted"; r.textContent="—";
+      cell.appendChild(r);
+    }
+    $("calendarGrid").appendChild(cell);
+  }
+  $("detailTitle").classList.add("hidden");
+  $("dayDetails").innerHTML = "";
+}
+function showDetails(dateStr, data){
+  $("detailTitle").classList.remove("hidden");
+  $("detailTitle").textContent = `Details — ${dateStr}`;
+  const meals = ["lunch","dinner"];
+  $("dayDetails").innerHTML = meals.map(mt=>{
+    const x = data[mt];
+    if (!x) return `<section><b>${mt.toUpperCase()}</b><div class="muted">No data</div></section>`;
+    const rows = (x.items||[]).map(i=>
+      `<tr><td>${i.name}</td><td>${i.quantity}</td><td>${fmt(i.unitPrice)}</td><td class="right">${fmt(i.total)}</td></tr>`
+    ).join("");
+    return `
+      <section>
+        <div><b>${mt.toUpperCase()}</b> — Students: ${x.studentCount} | Total: <b>${fmt(x.totalCost)}</b> | Per head: <b>${fmt(x.ratePerStudent)}</b></div>
+        <div class="scroll" style="margin-top:8px">
+          <table>
+            <thead><tr><th>Item</th><th>Qty</th><th>Unit Price</th><th class="right">Total</th></tr></thead>
+            <tbody>${rows || `<tr><td colspan="4" class="muted">No items</td></tr>`}</tbody>
+          </table>
+        </div>
+      </section>
+    `;
+  }).join("");
+}
+
+/* ---------- init on load ---------- */
+resetMealForm();
+(function initPublic(){
+  const now = new Date();
+  $("jumpMonth").value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
+  setYM(now);
+})();
+</script>
+
+</body>
+</html>
